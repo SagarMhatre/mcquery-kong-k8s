@@ -50,9 +50,9 @@ items:
                 - name: KONG_TRACING_INSTRUMENTATIONS
                   value: "request"
                 - name: KONG_ADMIN_GUI_URL
-                  value: "http://a709d0c3eba3a4637b988288b4fe1293-527736602.us-east-1.elb.amazonaws.com:8002"
+                  value: "http://aac68ba4a63de4e1ba797d45ccf785fb-1312079909.us-east-1.elb.amazonaws.com:8002"
                 - name: KONG_ADMIN_GUI_API_URL
-                  value: "ab737a67530fc4cc39acc97d6188731c-1080542740.us-east-1.elb.amazonaws.com:8001"                                    
+                  value: "a936b37591d2c4ba681d5d3d15a19f2b-39893890.us-east-1.elb.amazonaws.com:8001"                                    
               ports:
                 - containerPort: 8000
                   name: proxy
