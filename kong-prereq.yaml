@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: List
+items:
+
+  - apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata: 
+      name: ebs-sc-kong
+    provisioner: ebs.csi.aws.com
+    volumeBindingMode: WaitForFirstConsumer
+    parameters:
+      type: gp2
+      iopsPerGB: "3" # Default for gp2, 3 IOPS per GB
+      fsType: ext4
+
+  # PersistentVolumeClaim for Postgres data (simulating "kong_data")
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: kong-data
+      namespace: kong
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: ebs-sc-kong
+      resources:
+        requests:
+          storage: 1Gi
+
+
+  # Deployment for Kong Database (Postgres)
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: kong-database
+      namespace: kong
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: kong-database
+      template:
+        metadata:
+          labels:
+            app: kong-database
+        spec:
+          containers:
+            - name: kong-database
+              image: postgres:16-alpine
+              env:
+                - name: POSTGRES_DB
+                  value: "kong"
+                - name: POSTGRES_USER
+                  value: "kong"
+                - name: POSTGRES_PASSWORD
+                  value: "mykongpassword"
+                # Specify the subdirectory for PostgreSQL data explicitly
+                - name: PGDATA
+                  value: "/var/lib/postgresql/data/pgdata"
+              ports:
+                - containerPort: 5432
+              volumeMounts:
+                - name: kong-data
+                  mountPath: /var/lib/postgresql/data
+          volumes:
+            - name: kong-data
+              persistentVolumeClaim:
+                claimName: kong-data
+
+  # Service to expose the database internally (so Kong can reach it)
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: kong-database
+      namespace: kong
+    spec:
+      selector:
+        app: kong-database
+      ports:
+        - port: 5432
+          targetPort: 5432
+
+  # Job for running the initial "kong migrations bootstrap" command
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: kong-migrations
+      namespace: kong
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: kong-migrations
+              image: kong:3.9
+              env:
+                - name: KONG_DATABASE
+                  value: "postgres"
+                - name: KONG_PG_DATABASE
+                  value: "kong"
+                - name: KONG_PG_HOST
+                  value: "kong-database"
+                - name: KONG_PG_USER
+                  value: "kong"
+                - name: KONG_PG_PASSWORD
+                  value: "mykongpassword"
+              command: ["kong", "migrations", "bootstrap"]
+
+  # Job for running "kong migrations up && kong migrations finish"
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: kong-migrations-up
+      namespace: kong
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: kong-migrations-up
+              image: kong:3.9
+              env:
+                - name: KONG_DATABASE
+                  value: "postgres"
+                - name: KONG_PG_DATABASE
+                  value: "kong"
+                - name: KONG_PG_HOST
+                  value: "kong-database"
+                - name: KONG_PG_USER
+                  value: "kong"
+                - name: KONG_PG_PASSWORD
+                  value: "mykongpassword"
+              command: ["/bin/sh", "-c", "kong migrations up && kong migrations finish"]
